@@ -12,23 +12,24 @@ import cv2
 import glob
 import gc
 
-from keras.models import load_model, Model, Sequential
-from keras.layers import (Input, Conv2D, MaxPooling2D, Flatten,
+from tensorflow.keras.models import load_model, Model, Sequential
+from tensorflow.keras.layers import (Input, Conv2D, MaxPooling2D, Flatten,
 		 	  Activation, Dense, Dropout, ZeroPadding2D)
-from keras.optimizers import Adam
-from keras.layers.normalization import BatchNormalization 
-from keras.callbacks import EarlyStopping, ModelCheckpoint
-from keras import backend as K
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.layers import BatchNormalization 
+from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
+from tensorflow.keras import backend as K
 from sklearn.metrics import confusion_matrix, accuracy_score
 from sklearn.model_selection import KFold, StratifiedShuffleSplit
-from keras.layers.advanced_activations import ELU
+from tensorflow.keras.layers import ELU
 
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
 # CHANGE THESE VARIABLES ---
-data_folder = '/home/anunez/URFD_opticalflow/'
-mean_file = '/home/anunez/flow_mean.mat'
+base_path = '/home/skim/Desktop/DEV/Fall-Detection-with-CNNs-and-Optical-Flow/'
+data_folder = base_path + 'URFD_opticalflow/'
+mean_file = base_path + 'flow_mean.mat'
 vgg_16_weights = 'weights.h5'
 save_features = False
 save_plots = True
@@ -54,8 +55,8 @@ batch_norm = True
 learning_rate = 0.0001
 mini_batch_size = 64
 weight_0 = 1
-epochs = 3000
-use_validation = False
+epochs = 3
+use_validation = True
 # After the training stops, use train+validation to train for 1 epoch
 use_val_for_training = False
 val_size = 100
@@ -86,8 +87,8 @@ def plot_training_info(case, metrics, save, history):
     plt.ioff()
     if 'accuracy' in metrics:     
         fig = plt.figure()
-        plt.plot(history['acc'])
-        if val: plt.plot(history['val_acc'])
+        plt.plot(history['accuracy'])
+        if val: plt.plot(history['val_accuracy'])
         plt.title('model accuracy')
         plt.ylabel('accuracy')
         plt.xlabel('epoch')
@@ -208,7 +209,7 @@ def saveFeatures(feature_extractor,
         flow = np.zeros(shape=(224,224,2*L,nb_stacks), dtype=np.float64)
         gen = generator(x_images,y_images)
         for i in range(len(x_images)):
-            flow_x_file, flow_y_file = gen.next()
+            flow_x_file, flow_y_file = next(gen)
             img_x = cv2.imread(flow_x_file, cv2.IMREAD_GRAYSCALE)
             img_y = cv2.imread(flow_y_file, cv2.IMREAD_GRAYSCALE)
             # Assign an image i to the jth stack in the kth position, but also
@@ -254,7 +255,7 @@ def test_video(feature_extractor, video_path, ground_truth):
     flow = np.zeros(shape=(224,224,2*L,nb_stacks), dtype=np.float64)
     gen = generator(x_images,y_images)
     for i in range(len(x_images)):
-        flow_x_file, flow_y_file = gen.next()
+        flow_x_file, flow_y_file = next(gen)
         img_x = cv2.imread(flow_x_file, cv2.IMREAD_GRAYSCALE)
         img_y = cv2.imread(flow_y_file, cv2.IMREAD_GRAYSCALE)
         # Assign an image i to the jth stack in the kth position, but also
@@ -441,8 +442,8 @@ def main():
                             random_state=7)
             indices_1 = trainval_split_1.split(X[ones,...],
                             np.argmax(_y[ones,...], 1))
-            train_indices_0, val_indices_0 = indices_0.next()
-            train_indices_1, val_indices_1 = indices_1.next()
+            train_indices_0, val_indices_0 = next(indices_0)
+            train_indices_1, val_indices_1 = next(indices_1)
 
             X_train = np.concatenate([X[zeroes,...][train_indices_0,...],
                         X[ones,...][train_indices_1,...]],axis=0)
@@ -492,8 +493,7 @@ def main():
                     kernel_initializer='glorot_uniform')(x)
         x = Activation('sigmoid')(x)
         
-        classifier = Model(input=extracted_features,
-                output=x, name='classifier')
+        classifier = Model(inputs=extracted_features, outputs=x, name='classifier_{}'.format(fold_number))
         fold_best_model_path = best_model_path + 'urfd_fold_{}.h5'.format(
                                 fold_number)
         classifier.compile(optimizer=adam, loss='binary_crossentropy',
@@ -526,7 +526,7 @@ def main():
                 X_train, y_train, 
                 validation_data=validation_data,
                 batch_size=_mini_batch_size,
-                nb_epoch=epochs,
+                epochs=epochs,
                 shuffle=True,
                 class_weight=class_weight,
                 callbacks=callbacks
@@ -549,7 +549,7 @@ def main():
                     X_train, y_train, 
                     validation_data=validation_data,
                     batch_size=_mini_batch_size,
-                    nb_epoch=epochs,
+                    epochs=epochs,
                     shuffle='batch',
                     class_weight=class_weight,
                     callbacks=callbacks
